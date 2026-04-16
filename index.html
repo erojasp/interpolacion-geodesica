@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interpolación Geodésica con Mapa</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --soft: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --accent-2: #38bdf8;
+      --border: #334155;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #0b1220, #111827);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.7rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 18px;
+      line-height: 1.45;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .full { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      font-size: 0.92rem;
+      margin-bottom: 6px;
+      color: #d1d5db;
+    }
+
+    input, select, button, textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--soft);
+      color: var(--text);
+      padding: 11px 12px;
+      font-size: 0.95rem;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    input:focus, select:focus, button:focus, textarea:focus {
+      outline: 2px solid rgba(56, 189, 248, 0.22);
+      border-color: var(--accent-2);
+    }
+
+    .input-error {
+      border-color: var(--danger) !important;
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.18);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: bold;
+      transition: transform 0.08s ease, opacity 0.2s ease;
+      border: none;
+    }
+
+    button:hover { opacity: 0.95; }
+    button:active { transform: translateY(1px); }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .btn-primary { background: var(--accent); color: #06250f; }
+    .btn-secondary { background: #0ea5e9; color: #03131b; }
+    .btn-muted { background: #374151; color: var(--text); }
+
+    .main-panel {
+      display: grid;
+      grid-template-rows: auto auto 520px;
+      gap: 20px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .metric .k {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 6px;
+    }
+
+    .metric .v {
+      font-size: 1.1rem;
+      font-weight: bold;
+      word-break: break-word;
+    }
+
+    .map-card {
+      padding: 14px;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      min-height: 480px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #0b1220;
+    }
+
+    .leaflet-container {
+      background: #0b1220;
+      color: #111827;
+      font: 12px/1.4 Arial, Helvetica, sans-serif;
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot-start { background: #16a34a; }
+    .dot-mid { background: #2563eb; }
+    .dot-end { background: #dc2626; }
+    .dot-line { background: #f59e0b; }
+
+    .status {
+      margin: 10px 0 0;
+      min-height: 24px;
+      font-size: 0.92rem;
+    }
+
+    .error { color: #fca5a5; }
+    .ok { color: #86efac; }
+    .warn { color: #fcd34d; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #0b1220;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1f2937;
+      text-align: left;
+      font-size: 0.92rem;
+    }
+
+    th {
+      background: #111827;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .table-wrap {
+      max-height: 380px;
+      overflow: auto;
+      border-radius: 14px;
+    }
+
+    .note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .helper {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+
+    .small-note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 1000px) {
+      .wrap { grid-template-columns: 1fr; }
+      .main-panel { grid-template-rows: auto auto 440px; }
+      .metrics { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      #map { min-height: 380px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Interpolación Geodésica</h1>
+      <div class="subtitle">
+        Ingresa las coordenadas geográficas de <strong>Inicio</strong> y <strong>Final</strong>, define la cantidad de puntos intermedios o la distancia entre polos, y visualiza los nodos y la trayectoria en el mapa.
+      </div>
+
+      <div class="grid">
+        <div>
+          <label for="latA">Latitud Inicio</label>
+          <input id="latA" type="number" step="any" value="-12.032196" />
+        </div>
+        <div>
+          <label for="lonA">Longitud Inicio</label>
+          <input id="lonA" type="number" step="any" value="-76.955385" />
+        </div>
+        <div>
+          <label for="latB">Latitud Final</label>
+          <input id="latB" type="number" step="any" value="-16.020000" />
+        </div>
+        <div>
+          <label for="lonB">Longitud Final</label>
+          <input id="lonB" type="number" step="any" value="-74.950000" />
+        </div>
+
+        <div class="full">
+          <label for="modo">Modo de cálculo</label>
+          <select id="modo">
+            <option value="cantidad">Por cantidad de puntos intermedios</option>
+            <option value="distancia">Por distancia entre polos (m)</option>
+          </select>
+        </div>
+
+        <div id="bloqueCantidad">
+          <label for="numPuntos">Cantidad de puntos intermedios</label>
+          <input id="numPuntos" type="number" min="0" step="1" value="10" />
+        </div>
+
+        <div id="bloqueDistancia" style="display:none;">
+          <label for="distanciaPolos">Distancia entre polos (m)</label>
+          <input id="distanciaPolos" type="number" min="0.01" step="any" value="1000" />
+        </div>
+
+        <div class="full">
+          <label for="prefijo">Prefijo por defecto para puntos intermedios</label>
+          <input id="prefijo" type="text" value="P" />
+          <div class="helper">Si un punto intermedio no tiene nombre personalizado, se usará este prefijo con su índice: P1, P2, P3...</div>
+        </div>
+
+        <div class="full">
+          <label for="nombresPolos">Nombres personalizados para puntos intermedios</label>
+          <textarea id="nombresPolos" placeholder="Ejemplo: Oleoducto, Torres, Válvula"></textarea>
+          <div class="helper">Puedes separarlos por coma, punto y coma o salto de línea. Los extremos siempre serán Inicio y Final.</div>
+        </div>
+
+        <div class="full">
+          <label for="decimales">Decimales de salida</label>
+          <input id="decimales" type="number" min="2" max="12" step="1" value="8" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="btnCalcular" type="button">Calcular</button>
+        <button class="btn-secondary" id="btnCsv" type="button" disabled>Descargar CSV</button>
+        <button class="btn-muted" id="btnLimpiar" type="button">Limpiar</button>
+      </div>
+
+      <div id="status" class="status"></div>
+      <div class="note">
+        Convención de signos: latitud norte (+), sur (-); longitud este (+), oeste (-). El cálculo usa el elipsoide WGS84 con GeographicLib. El mapa usa Leaflet y OpenStreetMap para el fondo cartográfico.
+      </div>
+    </section>
+
+    <section class="main-panel">
+      <section class="card">
+        <div class="metrics">
+          <div class="metric">
+            <div class="k">Distancia total</div>
+            <div class="v" id="distanciaTotal">-</div>
+          </div>
+          <div class="metric">
+            <div class="k">Azimut inicial</div>
+            <div class="v" id="azimutInicial">-</div>
+          </div>
+          <div class="metric">
+            <div class="k">Azimut final</div>
+            <div class="v" id="azimutFinal">-</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="table-wrap">
+          <table id="tablaResultados">
+            <thead>
+              <tr>
+                <th>Punto</th>
+                <th>Índice</th>
+                <th>Distancia acumulada (m)</th>
+                <th>Latitud</th>
+                <th>Longitud</th>
+              </tr>
+            </thead>
+            <tbody id="tablaBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card map-card">
+        <div id="map"></div>
+        <div class="legend">
+          <span><i class="dot dot-start"></i>Inicio</span>
+          <span><i class="dot dot-mid"></i>Intermedios</span>
+          <span><i class="dot dot-end"></i>Final</span>
+          <span><i class="dot dot-line"></i>Trayectoria</span>
+        </div>
+        <div class="small-note">Si abres este HTML sin internet, el cálculo seguirá funcionando si GeographicLib carga localmente, pero el mapa base y Leaflet por CDN no se mostrarán.</div>
+      </section>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/geographiclib@1.52.2/geographiclib.min.js"></script>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    (function () {
+      const els = {
+        latA: document.getElementById('latA'),
+        lonA: document.getElementById('lonA'),
+        latB: document.getElementById('latB'),
+        lonB: document.getElementById('lonB'),
+        modo: document.getElementById('modo'),
+        numPuntos: document.getElementById('numPuntos'),
+        distanciaPolos: document.getElementById('distanciaPolos'),
+        prefijo: document.getElementById('prefijo'),
+        nombresPolos: document.getElementById('nombresPolos'),
+        decimales: document.getElementById('decimales'),
+        bloqueCantidad: document.getElementById('bloqueCantidad'),
+        bloqueDistancia: document.getElementById('bloqueDistancia'),
+        btnCalcular: document.getElementById('btnCalcular'),
+        btnCsv: document.getElementById('btnCsv'),
+        btnLimpiar: document.getElementById('btnLimpiar'),
+        status: document.getElementById('status'),
+        distanciaTotal: document.getElementById('distanciaTotal'),
+        azimutInicial: document.getElementById('azimutInicial'),
+        azimutFinal: document.getElementById('azimutFinal'),
+        tablaBody: document.getElementById('tablaBody')
+      };
+
+      const geod = window.GeographicLib && window.GeographicLib.Geodesic
+        ? window.GeographicLib.Geodesic.WGS84
+        : null;
+
+      const canMap = typeof window.L !== 'undefined';
+      let map = null;
+      let markersLayer = null;
+      let lineLayer = null;
+      let resultados = [];
+
+      function initMap() {
+        if (!canMap || map) return;
+
+        map = L.map('map', {
+          zoomControl: true,
+          attributionControl: true,
+          preferCanvas: true
+        }).setView([-12.032196, -76.955385], 5);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        markersLayer = L.layerGroup().addTo(map);
+        lineLayer = L.layerGroup().addTo(map);
+
+        setTimeout(function () {
+          map.invalidateSize();
+        }, 100);
+      }
+
+      function setStatus(msg, type) {
+        els.status.textContent = msg || '';
+        els.status.className = 'status' + (type ? ' ' + type : '');
+      }
+
+      function fmt(num, dec) {
+        return Number(num).toFixed(dec);
+      }
+
+      function clearErrors() {
+        [
+          els.latA, els.lonA, els.latB, els.lonB,
+          els.numPuntos, els.distanciaPolos, els.prefijo,
+          els.decimales, els.nombresPolos
+        ].forEach(function (el) {
+          el.classList.remove('input-error');
+        });
+      }
+
+      function markError(el) {
+        if (el) el.classList.add('input-error');
+      }
+
+      function normalizeNumericText(raw) {
+        return String(raw || '')
+          .trim()
+          .replace(/\s+/g, '')
+          .replace(',', '.');
+      }
+
+      function syncNormalizedValue(el) {
+        const normalized = normalizeNumericText(el.value);
+        if (normalized !== '' && normalized !== el.value) {
+          el.value = normalized;
+        }
+      }
+
+      function readNumber(el, label, min, max) {
+        const raw = normalizeNumericText(el.value);
+        if (raw === '') {
+          markError(el);
+          throw new Error('El campo "' + label + '" no puede estar vacío.');
+        }
+        if (!/^[-+]?\d*\.?\d+$/.test(raw)) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe contener un número válido.');
+        }
+
+        const value = Number(raw);
+        if (!Number.isFinite(value)) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe contener un número válido.');
+        }
+        if (min !== undefined && value < min) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser mayor o igual a ' + min + '.');
+        }
+        if (max !== undefined && value > max) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser menor o igual a ' + max + '.');
+        }
+
+        el.value = raw;
+        return value;
+      }
+
+      function readInteger(el, label, min, max) {
+        const raw = normalizeNumericText(el.value);
+        if (raw === '') {
+          markError(el);
+          throw new Error('El campo "' + label + '" no puede estar vacío.');
+        }
+        if (!/^[+-]?\d+$/.test(raw)) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser un número entero válido.');
+        }
+
+        const value = Number(raw);
+        if (!Number.isInteger(value)) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser un número entero válido.');
+        }
+        if (min !== undefined && value < min) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser mayor o igual a ' + min + '.');
+        }
+        if (max !== undefined && value > max) {
+          markError(el);
+          throw new Error('El campo "' + label + '" debe ser menor o igual a ' + max + '.');
+        }
+
+        el.value = String(value);
+        return value;
+      }
+
+      function sanitizeName(text) {
+        return String(text || '')
+          .replace(/[\r\n\t]+/g, ' ')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+
+      function parseCustomNames() {
+        return String(els.nombresPolos.value || '')
+          .split(/[;,\n]+/)
+          .map(sanitizeName)
+          .filter(Boolean);
+      }
+
+      function escapeCsv(value) {
+        const text = String(value == null ? '' : value);
+        if (/[";\n\r]/.test(text)) {
+          return '"' + text.replace(/"/g, '""') + '"';
+        }
+        return text;
+      }
+
+      function clearMapGraphics() {
+        if (!map) return;
+        if (markersLayer) markersLayer.clearLayers();
+        if (lineLayer) lineLayer.clearLayers();
+      }
+
+      function resetResults() {
+        resultados = [];
+        els.tablaBody.innerHTML = '';
+        els.distanciaTotal.textContent = '-';
+        els.azimutInicial.textContent = '-';
+        els.azimutFinal.textContent = '-';
+        els.btnCsv.disabled = true;
+        clearMapGraphics();
+      }
+
+      function renderTable(decimals) {
+        els.tablaBody.innerHTML = '';
+        resultados.forEach(function (row) {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' + row.punto + '</td>' +
+            '<td>' + row.indice + '</td>' +
+            '<td>' + fmt(row.distancia_m, 3) + '</td>' +
+            '<td>' + fmt(row.latitud, decimals) + '</td>' +
+            '<td>' + fmt(row.longitud, decimals) + '</td>';
+          els.tablaBody.appendChild(tr);
+        });
+      }
+
+      function validateCustomNames(numIntermedios, fallbackPrefix) {
+        const names = parseCustomNames();
+        if (names.some(function (name) { return /^inicio$/i.test(name) || /^final$/i.test(name); })) {
+          markError(els.nombresPolos);
+          throw new Error('Los nombres personalizados no deben usar "Inicio" ni "Final", porque esos nombres están reservados para los extremos.');
+        }
+
+        const used = new Set();
+        names.forEach(function (name) {
+          const key = name.toLowerCase();
+          if (used.has(key)) {
+            markError(els.nombresPolos);
+            throw new Error('El nombre personalizado "' + name + '" está repetido.');
+          }
+          used.add(key);
+        });
+
+        const generated = [];
+        for (let i = 1; i <= numIntermedios; i++) {
+          generated.push(names[i - 1] || (fallbackPrefix + i));
+        }
+        return generated;
+      }
+
+      function makeCircleMarker(lat, lon, color, radius) {
+        return L.circleMarker([lat, lon], {
+          radius: radius,
+          color: color,
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.85
+        });
+      }
+
+      function buildPopup(row) {
+        return '<div style="min-width:180px; line-height:1.45;">' +
+          '<strong>' + row.punto + '</strong><br>' +
+          'Índice: ' + row.indice + '<br>' +
+          'Distancia acumulada: ' + fmt(row.distancia_m, 3) + ' m<br>' +
+          'Latitud: ' + fmt(row.latitud, 8) + '<br>' +
+          'Longitud: ' + fmt(row.longitud, 8) +
+          '</div>';
+      }
+
+      function sampleDensePath(latA, lonA, azi1, distTotal) {
+        const coords = [];
+        const steps = Math.max(24, Math.min(300, Math.ceil(distTotal / 5000)));
+
+        for (let i = 0; i <= steps; i++) {
+          const s = distTotal * (i / steps);
+          const p = geod.Direct(latA, lonA, azi1, s);
+          coords.push([p.lat2, p.lon2]);
+        }
+        return coords;
+      }
+
+      function updateMap(latA, lonA, azi1, distTotal) {
+        if (!canMap || !map || !resultados.length) return;
+
+        clearMapGraphics();
+
+        const lineCoords = sampleDensePath(latA, lonA, azi1, distTotal);
+        const polyline = L.polyline(lineCoords, {
+          color: '#f59e0b',
+          weight: 3,
+          opacity: 0.95,
+          smoothFactor: 1
+        }).addTo(lineLayer);
+
+        resultados.forEach(function (row, idx) {
+          let color = '#2563eb';
+          let radius = 6;
+
+          if (idx === 0) {
+            color = '#16a34a';
+            radius = 8;
+          } else if (idx === resultados.length - 1) {
+            color = '#dc2626';
+            radius = 8;
+          }
+
+          makeCircleMarker(row.latitud, row.longitud, color, radius)
+            .bindPopup(buildPopup(row))
+            .addTo(markersLayer);
+        });
+
+        const bounds = polyline.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.2), {
+            animate: true,
+            duration: 0.6,
+            maxZoom: 15
+          });
+        }
+      }
+
+      function calculate() {
+        try {
+          clearErrors();
+          if (!geod) {
+            throw new Error('No se pudo cargar GeographicLib. Revisa la conexión o usa una copia local de la librería.');
+          }
+
+          const latA = readNumber(els.latA, 'Latitud Inicio', -90, 90);
+          const lonA = readNumber(els.lonA, 'Longitud Inicio', -180, 180);
+          const latB = readNumber(els.latB, 'Latitud Final', -90, 90);
+          const lonB = readNumber(els.lonB, 'Longitud Final', -180, 180);
+          const dec = readInteger(els.decimales, 'Decimales de salida', 2, 12);
+
+          if (latA === latB && lonA === lonB) {
+            markError(els.latA);
+            markError(els.lonA);
+            markError(els.latB);
+            markError(els.lonB);
+            throw new Error('Inicio y Final son iguales. Debes ingresar coordenadas distintas.');
+          }
+
+          let numIntermedios;
+          let delta;
+
+          const inv = geod.Inverse(latA, lonA, latB, lonB);
+          const distTotal = inv.s12;
+          const azi1 = inv.azi1;
+          const azi2 = inv.azi2;
+
+          if (!Number.isFinite(distTotal) || distTotal <= 0) {
+            throw new Error('No fue posible calcular una distancia válida entre Inicio y Final.');
+          }
+
+          if (els.modo.value === 'cantidad') {
+            numIntermedios = readInteger(els.numPuntos, 'Cantidad de puntos intermedios', 0, 100000);
+            delta = distTotal / (numIntermedios + 1);
+          } else {
+            const distPolos = readNumber(els.distanciaPolos, 'Distancia entre polos', 0.000001);
+            const tramos = Math.ceil(distTotal / distPolos);
+            numIntermedios = Math.max(0, tramos - 1);
+            delta = distTotal / tramos;
+          }
+
+          const prefijo = sanitizeName(els.prefijo.value) || 'P';
+          els.prefijo.value = prefijo;
+          const pointNames = validateCustomNames(numIntermedios, prefijo);
+
+          resultados = [];
+          resultados.push({ punto: 'Inicio', indice: 0, distancia_m: 0, latitud: latA, longitud: lonA });
+
+          for (let i = 1; i <= numIntermedios; i++) {
+            const s = i * delta;
+            const p = geod.Direct(latA, lonA, azi1, s);
+            resultados.push({
+              punto: pointNames[i - 1],
+              indice: i,
+              distancia_m: s,
+              latitud: p.lat2,
+              longitud: p.lon2
+            });
+          }
+
+          resultados.push({
+            punto: 'Final',
+            indice: numIntermedios + 1,
+            distancia_m: distTotal,
+            latitud: latB,
+            longitud: lonB
+          });
+
+          renderTable(dec);
+          els.distanciaTotal.textContent = fmt(distTotal, 3) + ' m';
+          els.azimutInicial.textContent = fmt(azi1, 6) + '°';
+          els.azimutFinal.textContent = fmt(azi2, 6) + '°';
+          els.btnCsv.disabled = false;
+          updateMap(latA, lonA, azi1, distTotal);
+          setStatus('Cálculo completado: ' + resultados.length + ' puntos generados y mapa actualizado.', 'ok');
+        } catch (err) {
+          resetResults();
+          setStatus(err.message, 'error');
+        }
+      }
+
+      function downloadCSV() {
+        if (!resultados.length) return;
+
+        const dec = Math.min(Math.max(Number(normalizeNumericText(els.decimales.value || '8')), 2), 12);
+        const lines = [
+          ['Punto', 'Indice', 'Distancia_acumulada_m', 'Latitud', 'Longitud']
+            .map(escapeCsv)
+            .join(';')
+        ];
+
+        resultados.forEach(function (r) {
+          lines.push([
+            r.punto,
+            r.indice,
+            fmt(r.distancia_m, 3),
+            fmt(r.latitud, dec),
+            fmt(r.longitud, dec)
+          ].map(escapeCsv).join(';'));
+        });
+
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'puntos_geodesicos.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function clearForm() {
+        clearErrors();
+        resetResults();
+        els.nombresPolos.value = '';
+        if (map) {
+          map.setView([-12.032196, -76.955385], 5);
+        }
+        setStatus('Campos listos para un nuevo cálculo.');
+      }
+
+      function toggleMode() {
+        const byCount = els.modo.value === 'cantidad';
+        els.bloqueCantidad.style.display = byCount ? 'block' : 'none';
+        els.bloqueDistancia.style.display = byCount ? 'none' : 'block';
+      }
+
+      [els.latA, els.lonA, els.latB, els.lonB, els.distanciaPolos, els.decimales, els.numPuntos].forEach(function (el) {
+        el.addEventListener('blur', function () {
+          if (el.value !== '') syncNormalizedValue(el);
+        });
+      });
+
+      els.btnCalcular.addEventListener('click', calculate);
+      els.btnCsv.addEventListener('click', downloadCSV);
+      els.btnLimpiar.addEventListener('click', clearForm);
+      els.modo.addEventListener('change', toggleMode);
+
+      toggleMode();
+      initMap();
+
+      if (!geod && !canMap) {
+        setStatus('Advertencia: GeographicLib y Leaflet no están disponibles. Revisa la carga de los scripts externos.', 'error');
+      } else if (!geod) {
+        setStatus('Advertencia: GeographicLib no está disponible. El mapa puede cargar, pero el cálculo fallará.', 'warn');
+      } else if (!canMap) {
+        setStatus('Advertencia: Leaflet no está disponible. El cálculo funcionará, pero el mapa no se mostrará.', 'warn');
+      } else {
+        setStatus('Interfaz lista. Ingresa los datos y presiona Calcular.');
+      }
+    })();
+  </script>
+</body>
+</html>
